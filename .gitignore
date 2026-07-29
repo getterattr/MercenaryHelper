@@ -55,3 +55,16 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.userprefs
+
+# Local build error dumps
+Errors.txt
+
+# Claude local per-machine settings (keep CLAUDE.md, drop only local overrides)
+.claude/settings.local.json
