@@ -1,0 +1,15 @@
+{
+  "notes": "Per-archetype quality gates. A merc matching a flagged archetype only keeps the highlight if it has at least one 'required' skill AND none of the 'forbidden' skills. Rules are derived from captainlance9's Luminary merc-bot guide.",
+  "rules": [
+    {
+      "archetype": "Kineticist",
+      "required": ["Kinetic Blast of Clustering"],
+      "forbidden": ["Kinetic Bolt"]
+    },
+    {
+      "archetype": "Manyshot",
+      "required": ["Ice Shot"],
+      "forbidden": ["Icicle Rain"]
+    }
+  ]
+}

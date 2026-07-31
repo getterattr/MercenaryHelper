@@ -13,6 +13,7 @@ namespace MercenaryHelper.Runtime.Features;
 internal sealed class MercenaryWorldLabelService
 {
     private const string MercenaryMetadataPrefix = "Metadata/Monsters/Mercenaries/";
+    private const string HiredMercenaryMetadataMarker = "Allied";
     private const int FriendlyMercenaryReaction = 70;
     private const string MoveSkillName = "Move";
     private const string PortalOutSkillName = "EASMercenaryPortalOut";
@@ -54,6 +55,7 @@ internal sealed class MercenaryWorldLabelService
         var highlightColor = settings.Configuration.HighlightColor.Value;
         var enabledArchetypes = settings.EnabledArchetypes;
         var catalog = _plugin.Archetypes;
+        var qualityRules = _plugin.QualityRules;
         var isInfamousMap = IsInfamousMap(gameController);
 
         foreach (var mercenary in monsters)
@@ -61,6 +63,10 @@ internal sealed class MercenaryWorldLabelService
             if (mercenary?.IsValid != true) continue;
             if (mercenary.IsHostile) continue;
             if (mercenary.Metadata?.StartsWith(MercenaryMetadataPrefix, StringComparison.Ordinal) != true) continue;
+            // Once hired the mercenary follows the player; the encounter overlay
+            // becomes noise. GGG marks hired mercs by inserting "Allied" into the
+            // metadata path.
+            if (mercenary.Metadata.Contains(HiredMercenaryMetadataMarker, StringComparison.Ordinal)) continue;
             if (!mercenary.TryGetComponent<Positioned>(out var positioned) || positioned.Reaction != FriendlyMercenaryReaction) continue;
             if (!mercenary.TryGetComponent<MinimapIcon>(out var minimapIcon) || minimapIcon.IsHide) continue;
             if (!mercenary.TryGetComponent<Actor>(out var actor) || actor.ActorSkills == null) continue;
@@ -73,7 +79,20 @@ internal sealed class MercenaryWorldLabelService
             var qualifiedArchetypeName = archetypeName != null && isInfamousMap
                 ? InfamousPrefix + archetypeName
                 : archetypeName;
-            var isArchetypeWatched = archetypeName != null && enabledArchetypes.Contains(archetypeName);
+
+            var qualityFilterEnabled = settings.QualityFilter.Enable.Value;
+            var quality = archetypeName != null && qualityFilterEnabled
+                ? qualityRules.Evaluate(archetypeName,
+                    displayableSkills.SelectMany(s => new[] { s.DisplayName, s.FullName }))
+                : QualityVerdict.NoRule;
+
+            // Highlight only if the archetype is user-flagged AND (either the
+            // quality filter is off OR no rule exists OR the rule passes).
+            // A bricked roll still shows the label so you can see WHY it
+            // wasn't flagged, but drops to the default colour.
+            var isArchetypeWatched = archetypeName != null &&
+                                     enabledArchetypes.Contains(archetypeName) &&
+                                     quality != QualityVerdict.Bricked;
 
             var screenPos = camera.WorldToScreen(mercenary.PosNum);
             var line = 0;
@@ -114,22 +133,41 @@ internal sealed class MercenaryWorldLabelService
     private static GameStat? TryParseStat(string name) =>
         Enum.TryParse<GameStat>(name, out var stat) ? stat : null;
 
-    private static List<(string DisplayName, string FullName)> CollectDisplayableSkills(Actor actor)
+    private static List<(string DisplayName, string FullName)> CollectDisplayableSkills(ExileCore.PoEMemory.Components.Actor actor)
     {
         var list = new List<(string, string)>();
         foreach (var skill in actor.ActorSkills)
         {
-            var fullSkillName = skill.Name;
+            var fullSkillName = skill?.Name;
             if (string.IsNullOrWhiteSpace(fullSkillName)) continue;
             if (fullSkillName == MoveSkillName || fullSkillName == PortalOutSkillName) continue;
 
-            var displayName = fullSkillName.EndsWith(MercenarySkillSuffix, StringComparison.Ordinal)
-                ? fullSkillName[..^MercenarySkillSuffix.Length]
-                : fullSkillName;
-
+            var displayName = ResolveSkillDisplayName(skill, fullSkillName);
             list.Add((displayName, fullSkillName));
         }
         return list;
+    }
+
+    // Resolve a mercenary's internal skill name (e.g. "ViperStrikeAltX") to the
+    // in-game display name (e.g. "Viper Strike of the Mamba") using the
+    // SkillGems file that ExileApi already parses. Falls back to the raw name
+    // with the "Mercenary" suffix stripped if the wrapper isn't populated.
+    private static string ResolveSkillDisplayName(ExileCore.PoEMemory.MemoryObjects.ActorSkill skill, string fullSkillName)
+    {
+        string resolved = null;
+        try
+        {
+            var wrapper = skill?.EffectsPerLevel?.SkillGemWrapper;
+            resolved = wrapper?.ActiveSkill?.DisplayName;
+            if (string.IsNullOrWhiteSpace(resolved))
+                resolved = wrapper?.Name;
+        }
+        catch { }
+
+        var name = !string.IsNullOrWhiteSpace(resolved) ? resolved : fullSkillName;
+        return name.EndsWith(MercenarySkillSuffix, StringComparison.Ordinal)
+            ? name[..^MercenarySkillSuffix.Length]
+            : name;
     }
 
 }

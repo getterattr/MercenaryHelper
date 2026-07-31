@@ -21,6 +21,10 @@ public partial class Main
 
     internal UniquePriceCatalog UniquePrices => _uniquePriceCatalog ??= new UniquePriceCatalog();
 
+    private QualityRuleset _qualityRuleset;
+
+    internal QualityRuleset QualityRules => _qualityRuleset ??= new QualityRuleset();
+
     private bool _isCurrentAreaTrackable
     {
         get => Runtime.State.Map.IsCurrentAreaTrackable;
@@ -52,8 +56,10 @@ public partial class Main
             () => DrawSectionHeader("Configuration"),
             () => DrawSectionHeader("Pricing"),
             () => DrawSectionHeader("Archetypes"),
+            () => DrawSectionHeader("Quality Filter"),
             DrawPricingStatusPanel,
             OnRefreshPricesPressed,
-            DrawArchetypeTableForAttribute);
+            DrawArchetypeTableForAttribute,
+            DrawQualityRulesPanel);
     }
 }

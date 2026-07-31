@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.Elements.InventoryElements;
 using ExileCore.PoEMemory.MemoryObjects;
@@ -7,14 +8,29 @@ using ExileCore.Shared.Enums;
 using SharpDX;
 using Color = SharpDX.Color;
 using RectangleF = SharpDX.RectangleF;
+using Vector2 = System.Numerics.Vector2;
 
 namespace MercenaryHelper.Runtime.Features;
 
 internal sealed class MercenaryPanelInspectorService
 {
-    private const int BorderThickness = 3;
-    private static readonly Color RucksackBorderColor = new(255, 200, 60, 220);
-    private static readonly Color SubduedUniqueColor = new(255, 140, 0, 255);
+    // Display rules:
+    //   Rucksack border + total label -> always yellow (identifies the container /
+    //   summary, never competes with per-item value).
+    //   Unique item box + label      -> highlight colour when chaos >= threshold,
+    //                                   subdued orange otherwise. Threshold is the
+    //                                   single source of truth for "flag me".
+    //   Highest-value unique(s)      -> label is prepended with a star so the eye
+    //                                   catches the standout piece regardless of
+    //                                   threshold. Ties share the star.
+    private const int RucksackBorderThickness = 3;
+    private const int HighlightBorderThickness = 2;
+    private const int SubduedBorderThickness = 1;
+    private const double MaxValueTolerance = 0.001;
+    private const string StarGlyph = "★";
+
+    private static readonly Color RucksackColor = new(255, 200, 60, 220);
+    private static readonly Color SubduedUniqueColor = new(255, 140, 0, 100);
     private static readonly Color PriceLabelBackground = new(0, 0, 0, 200);
 
     private readonly Main _plugin;
@@ -37,49 +53,100 @@ internal sealed class MercenaryPanelInspectorService
         var graphics = _plugin.Graphics;
         var priceCatalog = _plugin.UniquePrices;
         var highlightColor = settings.Configuration.HighlightColor.Value;
-        var chaosThreshold = settings.Configuration.ChaosThreshold.Value;
+        var chaosThreshold = (double)settings.Configuration.ChaosThreshold.Value;
 
         var rucksack = FindRucksack(inventories);
-        if (rucksack != null)
-        {
-            var rect = TryGetRect(rucksack);
-            if (rect.HasValue)
-                graphics.DrawFrame(rect.Value, RucksackBorderColor, BorderThickness);
-        }
+        RectangleF? rucksackRect = rucksack != null ? TryGetRect(rucksack) : null;
+
+        // Collect priced uniques and sum the rucksack in one pass, then compute
+        // the top-value unique for the star glyph before drawing.
+        var uniqueDraws = new List<UniqueDraw>();
+        double rucksackTotalChaos = 0;
+        var rucksackPriced = 0;
 
         foreach (var vendorInventory in inventories)
         {
             if (vendorInventory == null) continue;
             var items = vendorInventory.VisibleInventoryItems;
             if (items == null) continue;
+            var isRucksack = ReferenceEquals(vendorInventory, rucksack);
 
             foreach (var slot in items)
             {
                 var item = slot?.Item;
                 if (item == null) continue;
+
+                var name = TryGetItemName(item);
+                double? unitChaos = null;
+                if (name != null && priceCatalog.TryGetPrice(name, out var chaos))
+                    unitChaos = chaos;
+
+                if (isRucksack && unitChaos.HasValue)
+                {
+                    rucksackTotalChaos += unitChaos.Value * TryGetStackSize(item);
+                    rucksackPriced++;
+                }
+
                 if (TryGetRarity(item) != ItemRarity.Unique) continue;
 
-                var uniqueName = TryGetUniqueName(item);
-                double? priceChaos = null;
-                if (uniqueName != null && priceCatalog.TryGetPrice(uniqueName, out var chaos))
-                    priceChaos = chaos;
+                var slotRect = TryGetRect(slot);
+                if (!slotRect.HasValue) continue;
 
-                var isHighValue = priceChaos.HasValue && priceChaos.Value >= chaosThreshold;
-                var color = isHighValue ? highlightColor : SubduedUniqueColor;
-
-                var itemRect = TryGetRect(slot);
-                if (!itemRect.HasValue) continue;
-
-                graphics.DrawFrame(itemRect.Value, color, BorderThickness);
-
-                if (priceChaos.HasValue)
-                {
-                    var label = $"{priceChaos.Value:N0}c";
-                    var textPos = new System.Numerics.Vector2(itemRect.Value.X + 4, itemRect.Value.Y + 4);
-                    graphics.DrawTextWithBackground(label, textPos, color, PriceLabelBackground);
-                }
+                uniqueDraws.Add(new UniqueDraw(slotRect.Value, unitChaos));
             }
         }
+
+        double? topUniqueChaos = null;
+        foreach (var d in uniqueDraws)
+            if (d.Chaos is { } v && (!topUniqueChaos.HasValue || v > topUniqueChaos.Value))
+                topUniqueChaos = v;
+
+        foreach (var d in uniqueDraws)
+        {
+            var isHighValue = d.Chaos.HasValue && d.Chaos.Value >= chaosThreshold;
+            var color = isHighValue ? highlightColor : SubduedUniqueColor;
+            var thickness = isHighValue ? HighlightBorderThickness : SubduedBorderThickness;
+
+            graphics.DrawFrame(d.Rect, color, thickness);
+
+            if (d.Chaos.HasValue)
+            {
+                var isTop = topUniqueChaos.HasValue &&
+                            Math.Abs(d.Chaos.Value - topUniqueChaos.Value) < MaxValueTolerance;
+                var label = isTop
+                    ? $"{StarGlyph} {d.Chaos.Value.ToString("N0", CultureInfo.InvariantCulture)}c"
+                    : $"{d.Chaos.Value.ToString("N0", CultureInfo.InvariantCulture)}c";
+                var textPos = new Vector2(d.Rect.X, d.Rect.Y);
+                graphics.DrawTextWithBackground(label, textPos, color, PriceLabelBackground);
+            }
+        }
+
+        if (rucksackRect.HasValue)
+        {
+            graphics.DrawFrame(rucksackRect.Value, RucksackColor, RucksackBorderThickness);
+
+            if (rucksackPriced > 0)
+            {
+                var label = $"{rucksackTotalChaos.ToString("N0", CultureInfo.InvariantCulture)}c";
+                var textPos = new Vector2(rucksackRect.Value.X, rucksackRect.Value.Y);
+                graphics.DrawTextWithBackground(label, textPos, RucksackColor, PriceLabelBackground);
+            }
+        }
+    }
+
+    private static int TryGetStackSize(Entity item)
+    {
+        if (item == null) return 1;
+        try
+        {
+            if (item.TryGetComponent<Stack>(out var stack))
+            {
+                var size = stack.Size;
+                if (size > 0) return size;
+            }
+        }
+        catch { }
+        return 1;
     }
 
     private static VendorInventory FindRucksack(IReadOnlyList<VendorInventory> inventories)
@@ -142,7 +209,7 @@ internal sealed class MercenaryPanelInspectorService
         return null;
     }
 
-    private static string TryGetUniqueName(Entity item)
+    private static string TryGetItemName(Entity item)
     {
         if (item == null) return null;
         try
@@ -159,4 +226,6 @@ internal sealed class MercenaryPanelInspectorService
         catch { }
         return null;
     }
+
+    private readonly record struct UniqueDraw(RectangleF Rect, double? Chaos);
 }

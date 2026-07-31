@@ -7,9 +7,11 @@ internal sealed record MainSettingsBindingTargets(
     Action DrawConfigurationHeader,
     Action DrawPricingHeader,
     Action DrawArchetypesHeader,
+    Action DrawQualityFilterHeader,
     Action DrawPricingStatusPanel,
     Action OnRefreshPricesPressed,
-    Action<string> DrawArchetypeTableForAttribute);
+    Action<string> DrawArchetypeTableForAttribute,
+    Action DrawQualityRulesPanel);
 
 internal static class MainSettingsBindings
 {
@@ -22,6 +24,8 @@ internal static class MainSettingsBindings
         settings.ConfigurationHeader.DrawDelegate = targets.DrawConfigurationHeader;
         settings.PricingHeader.DrawDelegate = targets.DrawPricingHeader;
         settings.ArchetypesHeader.DrawDelegate = targets.DrawArchetypesHeader;
+        settings.QualityFilterHeader.DrawDelegate = targets.DrawQualityFilterHeader;
+        settings.QualityFilter.RulesPanel.DrawDelegate = targets.DrawQualityRulesPanel;
         settings.Pricing.StatusPanel.DrawDelegate = targets.DrawPricingStatusPanel;
         settings.Pricing.RefreshPricesAction.OnPressed = targets.OnRefreshPricesPressed;
 

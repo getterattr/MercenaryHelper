@@ -42,8 +42,19 @@ public class Settings : ISettings
     [Menu("Archetype Groups", "Pick which mercenary archetypes to flag, grouped by attribute.")]
     public ArchetypesSettings Archetypes { get; set; } = new();
 
+    [Menu("Quality Filter")]
     [JsonIgnore]
-    internal HashSet<string> EnabledArchetypes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public CustomNode QualityFilterHeader { get; set; } = new();
+
+    [Menu("Quality Filter Options", "Per-archetype skill gates. A flagged mercenary only stays highlighted when it has at least one required skill AND none of the forbidden skills for its archetype.")]
+    public QualityFilterSettings QualityFilter { get; set; } = new();
+
+    [JsonIgnore]
+    internal HashSet<string> EnabledArchetypes { get; set; } = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Kineticist",
+        "Manyshot",
+    };
 
     [JsonProperty("EnabledArchetypes")]
     public List<string> SavedEnabledArchetypes
@@ -110,4 +121,15 @@ public class ArchetypeGroupSettings
     [Menu("Archetypes", "Tick archetypes in this attribute group to flag matching mercenaries.")]
     [JsonIgnore]
     public CustomNode Table { get; set; } = new();
+}
+
+[Submenu(CollapsedByDefault = true)]
+public class QualityFilterSettings
+{
+    [Menu("Enable Quality Filter", "When on, flagged mercenaries are only highlighted if their skills pass the per-archetype rules below. When off, every flagged archetype highlights regardless of skills.")]
+    public ToggleNode Enable { get; set; } = new(true);
+
+    [Menu("Rules", "Edit required and forbidden skill substrings per archetype. Persists to ExileApi/config/global/MercenaryHelper_quality.json.")]
+    [JsonIgnore]
+    public CustomNode RulesPanel { get; set; } = new();
 }

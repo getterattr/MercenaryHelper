@@ -37,11 +37,7 @@ public partial class Main
         if (ImGui.BeginTable("##MercenaryHelperOverview", 2, SummaryTableFlags))
         {
             DrawSummaryRow("Plugin state", settings.Enable.Value ? "Enabled" : "Disabled", GetStateColor(settings.Enable.Value));
-            DrawSummaryRow("Current area", FormatText(Core.CurrentArea?.DisplayName, "Unknown"));
             DrawSummaryRow("Flagged archetypes", settings.EnabledArchetypes.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            DrawSummaryRow("Archetype catalog",
-                Archetypes.IsLoaded ? $"{Archetypes.Archetypes.Count} loaded" : $"failed ({Archetypes.LoadError ?? "unknown"})",
-                GetStateColor(Archetypes.IsLoaded));
             DrawSummaryRow("Unique prices",
                 catalog.IsFetching
                     ? "fetching..."
@@ -105,11 +101,13 @@ public partial class Main
         if (ImGui.Button($"Select All##{attributeKey}"))
         {
             foreach (var a in rows) enabled.Add(a.Name);
+            SavePersistedPickerState();
         }
         ImGui.SameLine();
         if (ImGui.Button($"Clear##{attributeKey}"))
         {
             foreach (var a in rows) enabled.Remove(a.Name);
+            SavePersistedPickerState();
         }
 
         if (!ImGui.BeginTable($"##ArchTable_{attributeKey}", 3, SummaryTableFlags)) return;
@@ -128,6 +126,7 @@ public partial class Main
             {
                 if (isEnabled) enabled.Add(archetype.Name);
                 else enabled.Remove(archetype.Name);
+                SavePersistedPickerState();
             }
             ImGui.TableNextColumn();
             if (isEnabled) ImGui.TextColored(SummaryOkColor, archetype.Name);
@@ -137,6 +136,96 @@ public partial class Main
         }
 
         ImGui.EndTable();
+    }
+
+    private void DrawQualityRulesPanel()
+    {
+        var ruleset = QualityRules;
+
+        ImGui.Dummy(new System.Numerics.Vector2(0, 4));
+
+        if (!ruleset.IsLoaded)
+        {
+            ImGui.TextColored(SummaryErrorColor, $"Quality ruleset not loaded ({ruleset.LoadError ?? "unknown"}).");
+            return;
+        }
+
+        ImGui.TextWrapped("A flagged mercenary is only highlighted if it has at least one Required skill AND none of the Forbidden skills for its archetype. Rules with no Required entries pass automatically. Edits save immediately to MercenaryHelper_quality.json.");
+
+        ImGui.Dummy(new System.Numerics.Vector2(0, 4));
+
+        if (ruleset.RuleCount == 0)
+        {
+            ImGui.TextColored(SummaryMutedColor, "No rules defined. Press Add Rule below to create one.");
+        }
+        else
+        {
+            const ImGuiTableFlags rulesTableFlags = ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV | ImGuiTableFlags.RowBg;
+            if (ImGui.BeginTable("##QualityRulesTable", 4, rulesTableFlags))
+            {
+                ImGui.TableSetupColumn("Archetype", ImGuiTableColumnFlags.WidthFixed, 160f);
+                ImGui.TableSetupColumn("Required (comma-separated)", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("Forbidden (comma-separated)", ImGuiTableColumnFlags.WidthStretch);
+                ImGui.TableSetupColumn("", ImGuiTableColumnFlags.WidthFixed, 40f);
+                ImGui.TableHeadersRow();
+
+                var removeIndex = -1;
+                for (var i = 0; i < ruleset.Rules.Count; i++)
+                {
+                    var rule = ruleset.Rules[i];
+                    ImGui.TableNextRow();
+
+                    ImGui.TableNextColumn();
+                    var archetypeName = rule.Archetype ?? string.Empty;
+                    if (ImGui.InputText($"##rule_arch_{i}", ref archetypeName, 64))
+                    {
+                        rule.Archetype = archetypeName;
+                        ruleset.PersistEdits();
+                    }
+
+                    ImGui.TableNextColumn();
+                    var requiredText = string.Join(", ", rule.Required);
+                    if (ImGui.InputText($"##rule_req_{i}", ref requiredText, 512))
+                    {
+                        rule.Required = ParseCsv(requiredText);
+                        ruleset.PersistEdits();
+                    }
+
+                    ImGui.TableNextColumn();
+                    var forbiddenText = string.Join(", ", rule.Forbidden);
+                    if (ImGui.InputText($"##rule_forb_{i}", ref forbiddenText, 512))
+                    {
+                        rule.Forbidden = ParseCsv(forbiddenText);
+                        ruleset.PersistEdits();
+                    }
+
+                    ImGui.TableNextColumn();
+                    if (ImGui.Button($"×##rule_del_{i}"))
+                        removeIndex = i;
+                }
+                ImGui.EndTable();
+
+                if (removeIndex >= 0) ruleset.RemoveRule(removeIndex);
+            }
+        }
+
+        ImGui.Dummy(new System.Numerics.Vector2(0, 4));
+        if (ImGui.Button("Add Rule"))
+        {
+            ruleset.AddRule("");
+        }
+    }
+
+    private static System.Collections.Generic.List<string> ParseCsv(string input)
+    {
+        var result = new System.Collections.Generic.List<string>();
+        if (string.IsNullOrWhiteSpace(input)) return result;
+        foreach (var part in input.Split(','))
+        {
+            var trimmed = part.Trim();
+            if (trimmed.Length > 0) result.Add(trimmed);
+        }
+        return result;
     }
 
     private static void DrawSummaryRow(string label, string value)
