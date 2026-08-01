@@ -113,9 +113,12 @@ internal sealed class QualityRuleset
         var normalizedRequired = rule.Required.Select(Normalize).Where(s => s.Length > 0).ToArray();
         var normalizedForbidden = rule.Forbidden.Select(Normalize).Where(s => s.Length > 0).ToArray();
 
-        var hasRequired = normalizedRequired.Length == 0 || normalizedRequired.Any(req =>
+        // ALL required skills must be present (AND). Nero's Ice Shot guide keys
+        // on "Ice Shot AND Returning Projectiles" - any-one-of would let a merc
+        // with Ice Shot but no Return slip through as Ideal.
+        var hasAllRequired = normalizedRequired.All(req =>
             normalized.Any(obs => obs.Contains(req, StringComparison.Ordinal) || req.Contains(obs, StringComparison.Ordinal)));
-        if (!hasRequired) return QualityVerdict.Bricked;
+        if (!hasAllRequired) return QualityVerdict.Bricked;
 
         var hasForbidden = normalizedForbidden.Any(forb =>
             normalized.Any(obs => obs.Contains(forb, StringComparison.Ordinal) || forb.Contains(obs, StringComparison.Ordinal)));
@@ -164,7 +167,7 @@ internal sealed class QualityRuleset
         new MutableQualityRule
         {
             Archetype = "Manyshot",
-            Required = new List<string> { "Ice Shot" },
+            Required = new List<string> { "Vaal Ice Shot" },
             Forbidden = new List<string> { "Icicle Rain" },
         },
     };

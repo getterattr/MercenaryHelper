@@ -24,6 +24,9 @@ internal sealed class MercenaryWorldLabelService
 
     private static readonly Color DefaultSkillColor = new(220, 220, 220, 255);
     private static readonly Color LabelBackgroundColor = new(0, 0, 0, 200);
+    // Kill-order palette: supports die first (green), primary last (yellow).
+    private static readonly Color KillFirstColor = new(120, 255, 120, 255);
+    private static readonly Color KillLastColor = new(255, 220, 90, 255);
 
     private readonly Main _plugin;
 
@@ -68,10 +71,27 @@ internal sealed class MercenaryWorldLabelService
             // metadata path.
             if (mercenary.Metadata.Contains(HiredMercenaryMetadataMarker, StringComparison.Ordinal)) continue;
             if (!mercenary.TryGetComponent<Positioned>(out var positioned) || positioned.Reaction != FriendlyMercenaryReaction) continue;
-            if (!mercenary.TryGetComponent<MinimapIcon>(out var minimapIcon) || minimapIcon.IsHide) continue;
+            if (!mercenary.TryGetComponent<MinimapIcon>(out var minimapIcon)) continue;
+            // MinimapIcon.IsHide == true marks accompanying supports; false marks the primary.
+            var isPrimary = !minimapIcon.IsHide;
             if (!mercenary.TryGetComponent<Actor>(out var actor) || actor.ActorSkills == null) continue;
 
             var displayableSkills = CollectDisplayableSkills(actor);
+            var screenPos = camera.WorldToScreen(mercenary.PosNum);
+            var line = 0;
+
+            // Supports die first; give them a compact green tag and skip
+            // archetype/quality work - it's not useful for a merc you can't hire.
+            if (!isPrimary)
+            {
+                graphics.DrawTextWithBackground(
+                    "[1] Kill first",
+                    screenPos,
+                    KillFirstColor,
+                    LabelBackgroundColor);
+                continue;
+            }
+
             var match = catalog.IsLoaded
                 ? catalog.Classify(displayableSkills.SelectMany(s => new[] { s.DisplayName, s.FullName }), MinimumSignatureMatches)
                 : null;
@@ -86,16 +106,21 @@ internal sealed class MercenaryWorldLabelService
                     displayableSkills.SelectMany(s => new[] { s.DisplayName, s.FullName }))
                 : QualityVerdict.NoRule;
 
-            // Highlight only if the archetype is user-flagged AND (either the
-            // quality filter is off OR no rule exists OR the rule passes).
-            // A bricked roll still shows the label so you can see WHY it
-            // wasn't flagged, but drops to the default colour.
             var isArchetypeWatched = archetypeName != null &&
                                      enabledArchetypes.Contains(archetypeName) &&
                                      quality != QualityVerdict.Bricked;
 
-            var screenPos = camera.WorldToScreen(mercenary.PosNum);
-            var line = 0;
+            // Flagged + ideal primary keeps the user's highlight colour so it
+            // pops against the kill-order palette. Everything else uses the
+            // yellow "kill last" tone.
+            var primaryColor = isArchetypeWatched ? highlightColor : KillLastColor;
+
+            graphics.DrawTextWithBackground(
+                "[2] Kill last",
+                screenPos + new Vector2(0, lineHeight * line),
+                KillLastColor,
+                LabelBackgroundColor);
+            line++;
 
             if (!string.IsNullOrEmpty(qualifiedArchetypeName))
             {
@@ -105,7 +130,7 @@ internal sealed class MercenaryWorldLabelService
                 graphics.DrawTextWithBackground(
                     label,
                     screenPos + new Vector2(0, lineHeight * line),
-                    isArchetypeWatched ? highlightColor : DefaultSkillColor,
+                    primaryColor,
                     LabelBackgroundColor);
                 line++;
             }
@@ -115,7 +140,7 @@ internal sealed class MercenaryWorldLabelService
                 graphics.DrawTextWithBackground(
                     displayName,
                     screenPos + new Vector2(0, lineHeight * line),
-                    isArchetypeWatched ? highlightColor : DefaultSkillColor,
+                    primaryColor,
                     LabelBackgroundColor);
                 line++;
             }

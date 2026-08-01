@@ -46,7 +46,7 @@ public class Settings : ISettings
     [JsonIgnore]
     public CustomNode QualityFilterHeader { get; set; } = new();
 
-    [Menu("Quality Filter Options", "Per-archetype skill gates. A flagged mercenary only stays highlighted when it has at least one required skill AND none of the forbidden skills for its archetype.")]
+    [Menu("Quality Filter Options", "Per-archetype skill gates. A flagged mercenary only stays highlighted when it has ALL required skills AND none of the forbidden skills for its archetype.")]
     public QualityFilterSettings QualityFilter { get; set; } = new();
 
     [JsonIgnore]

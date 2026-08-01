@@ -150,7 +150,7 @@ public partial class Main
             return;
         }
 
-        ImGui.TextWrapped("A flagged mercenary is only highlighted if it has at least one Required skill AND none of the Forbidden skills for its archetype. Rules with no Required entries pass automatically. Edits save immediately to MercenaryHelper_quality.json.");
+        ImGui.TextWrapped("A flagged mercenary is only highlighted if it has ALL Required skills AND none of the Forbidden skills for its archetype. Rules with no Required entries pass automatically. Edits save immediately to MercenaryHelper_quality.json.");
 
         ImGui.Dummy(new System.Numerics.Vector2(0, 4));
 
