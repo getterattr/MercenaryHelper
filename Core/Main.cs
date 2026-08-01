@@ -1,17 +1,13 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using ExileCore;
 using ExileCore.PoEMemory.MemoryObjects;
-using Newtonsoft.Json;
 
 namespace MercenaryHelper;
 
 public partial class Main : BaseSettingsPlugin<Settings>
 {
     private const string MenagerieAreaName = "The Menagerie";
-    private const string PersistedSettingsFileName = "MercenaryHelper_settings.json";
 
     public Main()
     {
@@ -45,14 +41,11 @@ public partial class Main : BaseSettingsPlugin<Settings>
         UniquePrices.LoadFromDisk();
         LogDebug($"Loaded {UniquePrices.PriceCount} cached unique prices (league '{UniquePrices.LastFetchLeague ?? "unknown"}').");
         UniquePrices.QueueFetch(Settings.Configuration.League.Value);
-
-        LoadPersistedPickerState();
     }
 
     public override void OnClose()
     {
         base.OnClose();
-        SavePersistedPickerState();
         Runtime.Shutdown();
         _runtime = null;
         _worldLabelService = null;
@@ -111,60 +104,6 @@ public partial class Main : BaseSettingsPlugin<Settings>
             _activeMapAreaName = Helpers.TryGetAreaNameText(currentArea);
             _activeMapInstanceId = Helpers.TryGetAreaInstanceId(currentArea);
         }
-    }
-
-    private void LoadPersistedPickerState()
-    {
-        try
-        {
-            var path = GetPersistedSettingsPath();
-            if (!File.Exists(path))
-            {
-                LogDebug($"No persisted settings at {path}; keeping default archetype picks.");
-                SavePersistedPickerState();
-                return;
-            }
-
-            var doc = JsonConvert.DeserializeObject<PersistedPickerState>(File.ReadAllText(path));
-            if (doc?.EnabledArchetypes == null) return;
-
-            Settings.EnabledArchetypes = new HashSet<string>(
-                doc.EnabledArchetypes.Where(x => !string.IsNullOrWhiteSpace(x)),
-                StringComparer.OrdinalIgnoreCase);
-            LogDebug($"Loaded {Settings.EnabledArchetypes.Count} persisted archetype selections.");
-        }
-        catch (Exception ex)
-        {
-            LogDebug($"Failed to load persisted picker state: {ex.GetType().Name}: {ex.Message}");
-        }
-    }
-
-    internal void SavePersistedPickerState()
-    {
-        try
-        {
-            var path = GetPersistedSettingsPath();
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var doc = new PersistedPickerState
-            {
-                EnabledArchetypes = Settings.EnabledArchetypes
-                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                    .ToList(),
-            };
-            File.WriteAllText(path, JsonConvert.SerializeObject(doc, Formatting.Indented));
-        }
-        catch (Exception ex)
-        {
-            LogDebug($"Failed to save persisted picker state: {ex.GetType().Name}: {ex.Message}");
-        }
-    }
-
-    private static string GetPersistedSettingsPath() =>
-        Path.Combine(Directory.GetCurrentDirectory(), "config", "global", PersistedSettingsFileName);
-
-    private sealed class PersistedPickerState
-    {
-        public List<string> EnabledArchetypes { get; set; }
     }
 
     private void LogDebug(string message)

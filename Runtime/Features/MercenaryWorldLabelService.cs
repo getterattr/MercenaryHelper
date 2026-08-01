@@ -14,7 +14,6 @@ internal sealed class MercenaryWorldLabelService
 {
     private const string MercenaryMetadataPrefix = "Metadata/Monsters/Mercenaries/";
     private const string HiredMercenaryMetadataMarker = "Allied";
-    private const int FriendlyMercenaryReaction = 70;
     private const string MoveSkillName = "Move";
     private const string PortalOutSkillName = "EASMercenaryPortalOut";
     private const string MercenarySkillSuffix = "Mercenary";
@@ -61,16 +60,33 @@ internal sealed class MercenaryWorldLabelService
         var qualityRules = _plugin.QualityRules;
         var isInfamousMap = IsInfamousMap(gameController);
 
+        // The mercenary encounter ends the instant the primary dies; supports
+        // stay on screen as inert props with all "alive/targetable" flags still
+        // true, so per-entity checks can't tell live combat from post-kill
+        // limbo. Cross-entity signal: if no primary is alive, the encounter is
+        // over - hide every merc label.
+        var hasLivePrimary = false;
+        foreach (var candidate in monsters)
+        {
+            if (candidate?.IsValid != true || !candidate.IsAlive) continue;
+            if (candidate.Metadata?.StartsWith(MercenaryMetadataPrefix, StringComparison.Ordinal) != true) continue;
+            if (candidate.Metadata.Contains(HiredMercenaryMetadataMarker, StringComparison.Ordinal)) continue;
+            if (!candidate.TryGetComponent<MinimapIcon>(out var mm)) continue;
+            if (mm.IsHide) continue;
+            hasLivePrimary = true;
+            break;
+        }
+        if (!hasLivePrimary) return;
+
         foreach (var mercenary in monsters)
         {
             if (mercenary?.IsValid != true) continue;
-            if (mercenary.IsHostile) continue;
+            if (!mercenary.IsAlive) continue;
             if (mercenary.Metadata?.StartsWith(MercenaryMetadataPrefix, StringComparison.Ordinal) != true) continue;
             // Once hired the mercenary follows the player; the encounter overlay
             // becomes noise. GGG marks hired mercs by inserting "Allied" into the
             // metadata path.
             if (mercenary.Metadata.Contains(HiredMercenaryMetadataMarker, StringComparison.Ordinal)) continue;
-            if (!mercenary.TryGetComponent<Positioned>(out var positioned) || positioned.Reaction != FriendlyMercenaryReaction) continue;
             if (!mercenary.TryGetComponent<MinimapIcon>(out var minimapIcon)) continue;
             // MinimapIcon.IsHide == true marks accompanying supports; false marks the primary.
             var isPrimary = !minimapIcon.IsHide;

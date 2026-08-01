@@ -101,13 +101,11 @@ public partial class Main
         if (ImGui.Button($"Select All##{attributeKey}"))
         {
             foreach (var a in rows) enabled.Add(a.Name);
-            SavePersistedPickerState();
         }
         ImGui.SameLine();
         if (ImGui.Button($"Clear##{attributeKey}"))
         {
             foreach (var a in rows) enabled.Remove(a.Name);
-            SavePersistedPickerState();
         }
 
         if (!ImGui.BeginTable($"##ArchTable_{attributeKey}", 3, SummaryTableFlags)) return;
@@ -126,7 +124,6 @@ public partial class Main
             {
                 if (isEnabled) enabled.Add(archetype.Name);
                 else enabled.Remove(archetype.Name);
-                SavePersistedPickerState();
             }
             ImGui.TableNextColumn();
             if (isEnabled) ImGui.TextColored(SummaryOkColor, archetype.Name);
