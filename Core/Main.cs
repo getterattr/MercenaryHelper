@@ -11,7 +11,7 @@ public partial class Main : BaseSettingsPlugin<Settings>
 
     public Main()
     {
-        Name = "MercenaryHelper";
+        Name = "Mercenary Helper";
     }
 
     public override void OnLoad()
